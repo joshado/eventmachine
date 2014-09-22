@@ -3,7 +3,7 @@
 # Author:: Francis Cianfrocca (gmail: blackhedd)
 # Homepage::  http://rubyeventmachine.com
 # Date:: 8 April 2006
-# 
+#
 # See EventMachine and EventMachine::Connection for documentation and
 # usage examples.
 #
@@ -11,18 +11,18 @@
 #
 # Copyright (C) 2006-07 by Francis Cianfrocca. All Rights Reserved.
 # Gmail: blackhedd
-# 
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of either: 1) the GNU General Public License
 # as published by the Free Software Foundation; either version 2 of the
 # License, or (at your option) any later version; or 2) Ruby's License.
-# 
+#
 # See the file COPYING for complete licensing information.
 #
 #---------------------------------------------------------------------------
 #
 #
-# 
+#
 
 $:.unshift File.expand_path(File.dirname(__FILE__) + "/../lib")
 require 'eventmachine'
@@ -165,8 +165,8 @@ class TestBasic < Test::Unit::TestCase
 
     test = self
     EM.run do
-      EM.start_server(TestHost, TestPort, Module.new do
-        define_method :post_init do
+      EM.start_server(local_ip, TestPort, Module.new do
+        define_method(:post_init) do
           begin
             test.assert_equal bind_port, Socket.unpack_sockaddr_in(get_peername).first
             test.assert_equal local_ip, Socket.unpack_sockaddr_in(get_peername).last
@@ -175,7 +175,7 @@ class TestBasic < Test::Unit::TestCase
           end
         end
       end)
-      EM.bind_connect local_ip, bind_port, TestHost, TestPort
+      EM.bind_connect local_ip, bind_port, local_ip, TestPort
     end
   end
 
@@ -193,7 +193,7 @@ class TestBasic < Test::Unit::TestCase
     end
     assert x
   end
-  
+
   def test_schedule_from_thread
     x = false
     assert !x
@@ -212,14 +212,14 @@ class TestBasic < Test::Unit::TestCase
     }
     assert_equal(interval, $interval)
   end
-  
+
   module PostInitRaiser
     ERR = Class.new(StandardError)
     def post_init
       raise ERR
     end
   end
-  
+
   def test_bubble_errors_from_post_init
     localhost, port = '127.0.0.1', 9000
     assert_raises(PostInitRaiser::ERR) do
@@ -229,14 +229,14 @@ class TestBasic < Test::Unit::TestCase
       end
     end
   end
-  
+
   module InitializeRaiser
     ERR = Class.new(StandardError)
     def initialize
       raise ERR
     end
   end
-  
+
   def test_bubble_errors_from_initialize
     localhost, port = '127.0.0.1', 9000
     assert_raises(InitializeRaiser::ERR) do
