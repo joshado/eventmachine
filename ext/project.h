@@ -114,6 +114,10 @@ using namespace std;
 #include <sys/queue.h>
 #endif
 
+#ifdef HAVE_EVENT_PORTS
+#include <port.h>
+#endif
+
 #ifdef HAVE_INOTIFY
 #include <sys/inotify.h>
 #endif

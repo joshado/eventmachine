@@ -31,7 +31,7 @@ bool SetSocketNonblocking (SOCKET sd)
 	int val = fcntl (sd, F_GETFL, 0);
 	return (fcntl (sd, F_SETFL, val | O_NONBLOCK) != SOCKET_ERROR) ? true : false;
 	#endif
-	
+
 	#ifdef OS_WIN32
 	#ifdef BUILD_FOR_RUBY
 	// 14Jun09 Ruby provides its own wrappers for ioctlsocket. On 1.8 this is a simple wrapper,
@@ -397,6 +397,10 @@ void ConnectionDescriptor::_UpdateEvents(bool read, bool write)
 	if (write && SelectForWrite())
 		MyEventMachine->ArmKqueueWriter (this);
 	#endif
+
+	#ifdef HAVE_EVENT_PORTS
+	MyEventMachine->Modify(this);
+	#endif
 }
 
 /***************************************
@@ -549,8 +553,10 @@ int ConnectionDescriptor::_SendRawOutboundData (const char *data, int length)
 
 	memcpy (buffer, data, length);
 	buffer [length] = 0;
+
 	OutboundPages.push_back (OutboundPage (buffer, length));
 	OutboundDataSize += length;
+
 
 	_UpdateEvents(false, true);
 
@@ -697,7 +703,7 @@ void ConnectionDescriptor::Read()
 		// NOTICE, we're reading one less than the buffer size.
 		// That's so we can put a guard byte at the end of what we send
 		// to user code.
-		
+
 
 		int r = read (sd, readbuffer, sizeof(readbuffer) - 1);
 		//cerr << "<R:" << r << ">";
@@ -878,7 +884,7 @@ void ConnectionDescriptor::_WriteOutboundData()
 	 * and when we get here. So this condition is not an error.
 	 *
 	 * 20Jul07, added the same kind of protection against an invalid socket
-	 * that is at the top of ::Read. Not entirely how this could happen in 
+	 * that is at the top of ::Read. Not entirely how this could happen in
 	 * real life (connection-reset from the remote peer, perhaps?), but I'm
 	 * doing it to address some reports of crashing under heavy loads.
 	 */
@@ -1159,7 +1165,7 @@ void ConnectionDescriptor::_DispatchCiphertext()
 		// try to put plaintext. INCOMPLETE, doesn't belong here?
 		// In SendOutboundData, we're spooling plaintext directly
 		// into SslBox. That may be wrong, we may need to buffer it
-		// up here! 
+		// up here!
 		/*
 		const char *ptr;
 		int ptr_length;

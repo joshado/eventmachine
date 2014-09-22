@@ -130,6 +130,10 @@ EventMachine_t::~EventMachine_t()
 		close (epfd);
 	if (kqfd != -1)
 		close (kqfd);
+	#ifdef HAVE_EVENT_PORTS
+	if (event_port != -1)
+		close(event_port);
+	#endif
 }
 
 
@@ -479,7 +483,17 @@ void EventMachine_t::Run()
 
 	#ifdef HAVE_EVENT_PORTS
 	if (bEventPorts) {
-		printf("Using event ports\n");
+		event_port = port_create();
+		if( event_port < 0 ) {
+			char buf[200];
+			snprintf (buf, sizeof(buf)-1, "unable to create event port: %s", strerror(errno));
+			throw std::runtime_error (buf);
+		}
+
+		assert (LoopBreakerReader >= 0);
+		LoopbreakDescriptor *ld = new LoopbreakDescriptor (LoopBreakerReader, this);
+		assert (ld);
+		Add (ld);
 
 	}
 	#endif
@@ -496,10 +510,8 @@ void EventMachine_t::Run()
 		_AddNewDescriptors();
 		_ModifyDescriptors();
 
-		if (!_RunOnce())
-			break;
-		if (gTerminateSignalReceived)
-			break;
+		if (!_RunOnce()) break;
+		if (gTerminateSignalReceived) break;
 	}
 
 	#ifdef OS_WIN32
@@ -519,6 +531,8 @@ bool EventMachine_t::_RunOnce()
 		ret = _RunEpollOnce();
 	else if (bKqueue)
 		ret = _RunKqueueOnce();
+	else if (bEventPorts)
+		ret = _RunEventPortsOnce();
 	else
 		ret = _RunSelectOnce();
 	_DispatchHeartbeats();
@@ -678,6 +692,55 @@ bool EventMachine_t::_RunKqueueOnce()
 	#endif
 }
 
+/******************************
+EventMachine_t::_RunEventPortsOnce
+******************************/
+
+bool EventMachine_t::_RunEventPortsOnce()
+{
+	#ifdef HAVE_EVENT_PORTS
+
+	port_event event;
+	int err = 0;
+
+	timeval tv = _TimeTilNextEvent();
+	timespec_t ts;
+	ts.tv_sec = tv.tv_sec;
+	ts.tv_nsec = tv.tv_usec * 1000;
+
+	err = port_get(event_port, &event, &ts);
+	if( err != 0 && errno != ETIME ) {
+		return false;
+	}
+
+	if( event.portev_source == PORT_SOURCE_FD) {
+		EventableDescriptor *ed = (EventableDescriptor*)event.portev_user;
+
+		if( event.portev_events & POLLIN ) ed->Read();
+		if( event.portev_events & POLLOUT ) ed->Write();
+		if( event.portev_events & POLLERR ) ed->HandleError();
+
+		if( ed->GetSocket() != INVALID_SOCKET ) {
+			int events = 0;
+			if( ed->SelectForRead() ) events |= POLLIN;
+			if( ed->SelectForWrite() ) events |= POLLOUT;
+			if( events ) {
+				int e = port_associate(event_port, PORT_SOURCE_FD, ed->GetSocket(), events, (void*)ed);
+				if (e) {
+					char buf [200];
+					snprintf (buf, sizeof(buf)-1, "unable to add new descriptor to event port: %s", strerror(errno));
+					throw std::runtime_error (buf);
+				}
+			}
+		}
+	}
+
+	return true;
+	#else
+	throw std::runtime_error ("event ports are not implemented on this platform");
+	#endif
+}
+
 
 /*********************************
 EventMachine_t::_TimeTilNextEvent
@@ -742,21 +805,38 @@ void EventMachine_t::_CleanupSockets()
 		EventableDescriptor *ed = Descriptors[i];
 		assert (ed);
 		if (ed->ShouldDelete()) {
-		#ifdef HAVE_EPOLL
-			if (bEpoll) {
-				assert (epfd != -1);
-				if (ed->GetSocket() != INVALID_SOCKET) {
-					int e = epoll_ctl (epfd, EPOLL_CTL_DEL, ed->GetSocket(), ed->GetEpollEvent());
-					// ENOENT or EBADF are not errors because the socket may be already closed when we get here.
-					if (e && (errno != ENOENT) && (errno != EBADF) && (errno != EPERM)) {
-						char buf [200];
-						snprintf (buf, sizeof(buf)-1, "unable to delete epoll event: %s", strerror(errno));
-						throw std::runtime_error (buf);
+			#ifdef HAVE_EPOLL
+				if (bEpoll) {
+					assert (epfd != -1);
+					if (ed->GetSocket() != INVALID_SOCKET) {
+						int e = epoll_ctl (epfd, EPOLL_CTL_DEL, ed->GetSocket(), ed->GetEpollEvent());
+						// ENOENT or EBADF are not errors because the socket may be already closed when we get here.
+						if (e && (errno != ENOENT) && (errno != EBADF) && (errno != EPERM)) {
+							char buf [200];
+							snprintf (buf, sizeof(buf)-1, "unable to delete epoll event: %s", strerror(errno));
+							throw std::runtime_error (buf);
+						}
 					}
+					ModifiedDescriptors.erase(ed);
 				}
-				ModifiedDescriptors.erase(ed);
-			}
-		#endif
+			#endif
+
+			#ifdef HAVE_EVENT_PORTS
+				if (bEventPorts) {
+					if( ed->GetSocket() != INVALID_SOCKET ) {
+						int e = port_dissociate(event_port, PORT_SOURCE_FD, ed->GetSocket());
+
+						// ENOENT = the specified FD was not associated with the port. Meh, carry on!
+						if(e && errno != ENOENT) {
+							char buf [200];
+							snprintf (buf, sizeof(buf)-1, "unable to dissociate FD from eventport: %s", strerror(errno));
+							throw std::runtime_error (buf);
+						}
+					}
+					ModifiedDescriptors.erase(ed);
+				}
+			#endif
+
 			delete ed;
 		}
 		else
@@ -1460,6 +1540,23 @@ int EventMachine_t::DetachFD (EventableDescriptor *ed)
 	}
 	#endif
 
+	#ifdef HAVE_EVENT_PORTS
+		if (bEventPorts) {
+			if( ed->GetSocket() != INVALID_SOCKET ) {
+				int e = port_dissociate(event_port, PORT_SOURCE_FD, ed->GetSocket());
+
+				// ENOENT = the specified FD was not associated with the port. Meh, carry on!
+				if(e && errno != ENOENT) {
+					char buf [200];
+					snprintf (buf, sizeof(buf)-1, "unable to dissociate FD from eventport: %s", strerror(errno));
+					throw std::runtime_error (buf);
+				}
+			}
+			ModifiedDescriptors.erase(ed);
+		}
+	#endif
+
+
 	// Prevent the descriptor from being modified, in case DetachFD was called from a timer or next_tick
 	ModifiedDescriptors.erase (ed);
 
@@ -1805,6 +1902,23 @@ void EventMachine_t::_AddNewDescriptors()
 		*/
 		#endif
 
+		#if HAVE_EVENT_PORTS
+		if (bEventPorts) {
+
+			int events = 0;
+			if( ed->SelectForRead() ) events |= POLLIN;
+			if( ed->SelectForWrite() ) events |= POLLOUT;
+
+			int e = port_associate(event_port, PORT_SOURCE_FD, ed->GetSocket(), events, (void*)ed);
+			if (e) {
+				char buf [200];
+				snprintf (buf, sizeof(buf)-1, "unable to add new descriptor to event port: %s", strerror(errno));
+				throw std::runtime_error (buf);
+			}
+
+		}
+		#endif
+
 		QueueHeartbeat(ed);
 		Descriptors.push_back (ed);
 	}
@@ -1835,12 +1949,41 @@ void EventMachine_t::_ModifyDescriptors()
 	 * descriptor to remove it from the Modified list.
 	 */
 
+
 	#ifdef HAVE_EPOLL
 	if (bEpoll) {
 		set<EventableDescriptor*>::iterator i = ModifiedDescriptors.begin();
 		while (i != ModifiedDescriptors.end()) {
 			assert (*i);
 			_ModifyEpollEvent (*i);
+			++i;
+		}
+	}
+	#endif
+	#ifdef HAVE_EVENT_PORTS
+	if (bEventPorts) {
+
+		set<EventableDescriptor*>::iterator i = ModifiedDescriptors.begin();
+		while (i != ModifiedDescriptors.end()) {
+			assert (*i);
+
+			EventableDescriptor* ed = (EventableDescriptor*)*i;
+
+
+			if( ed->GetSocket() != INVALID_SOCKET ) {
+				int events = 0;
+				if( ed->SelectForRead() ) events |= POLLIN;
+				if( ed->SelectForWrite() ) events |= POLLOUT;
+				if( events ) {
+					int e = port_associate(event_port, PORT_SOURCE_FD, ed->GetSocket(), events, (void*)ed);
+					if (e) {
+						char buf [200];
+						snprintf (buf, sizeof(buf)-1, "unable to add new descriptor to event port: %s", strerror(errno));
+						throw std::runtime_error (buf);
+					}
+				}
+			}
+
 			++i;
 		}
 	}
@@ -2179,6 +2322,8 @@ EventMachine_t::WatchFile
 
 const unsigned long EventMachine_t::WatchFile (const char *fpath)
 {
+	printf("not yet...\n");
+	return 0;
 	struct stat sb;
 	int sres;
 	int wd = -1;

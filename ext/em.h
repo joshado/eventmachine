@@ -136,6 +136,7 @@ class EventMachine_t
 
 		bool UsingKqueue() { return bKqueue; }
 		bool UsingEpoll() { return bEpoll; }
+		bool UsingEventPorts() { return bEventPorts; }
 
 		void QueueHeartbeat(EventableDescriptor*);
 		void ClearHeartbeat(uint64_t);
@@ -154,6 +155,9 @@ class EventMachine_t
 		bool _RunSelectOnce();
 		bool _RunEpollOnce();
 		bool _RunKqueueOnce();
+		#ifdef HAVE_EVENT_PORTS
+		bool _RunEventPortsOnce();
+		#endif
 
 		void _ModifyEpollEvent (EventableDescriptor*);
 		void _DispatchHeartbeats();
@@ -214,6 +218,9 @@ class EventMachine_t
 		#endif
 
 		bool bEventPorts;
+		#ifdef HAVE_EVENT_PORTS
+		int event_port;
+		#endif
 
 		InotifyDescriptor *inotify; // pollable descriptor for our inotify instance
 };

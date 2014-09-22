@@ -239,11 +239,12 @@ class TestSendFile < Test::Unit::TestCase
     }
 
     expected = [
-      "4000\r\n#{"A" * 16384}\r\n" * 6,
+      "4000\r\n#{"A" * 0x4000}\r\n" * 6,
       "6a0\r\n#{"A" * 0x6a0}\r\n",
       "0\r\n\r\n"
     ].join
     assert_equal( expected, data )
+    assert_equal( Digest::MD5.hexdigest(expected), Digest::MD5.hexdigest(data) )
 
     File.unlink TestFilename
   end
