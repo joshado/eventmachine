@@ -132,6 +132,7 @@ class EventMachine_t
 		// Temporary:
 		void _UseEpoll();
 		void _UseKqueue();
+		void _UseEventPorts();
 
 		bool UsingKqueue() { return bKqueue; }
 		bool UsingEpoll() { return bEpoll; }
@@ -211,6 +212,8 @@ class EventMachine_t
 		#ifdef HAVE_KQUEUE
 		struct kevent Karray [MaxEvents];
 		#endif
+
+		bool bEventPorts;
 
 		InotifyDescriptor *inotify; // pollable descriptor for our inotify instance
 };

@@ -18,10 +18,12 @@ class TestFileWatch < Test::Unit::TestCase
 
   def setup
     EM.kqueue = true if EM.kqueue?
+    EM.event_ports = true if EM.event_ports?
   end
 
   def teardown
     EM.kqueue = false if EM.kqueue?
+    EM.event_ports = false if EM.event_ports?
   end
 
   def test_events

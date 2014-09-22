@@ -31,6 +31,7 @@ See the file COPYING for complete licensing information.
 static EventMachine_t *EventMachine;
 static int bUseEpoll = 0;
 static int bUseKqueue = 0;
+static int bUseEventPorts = 0;
 
 extern "C" void ensure_eventmachine (const char *caller = "unknown caller")
 {
@@ -66,6 +67,8 @@ extern "C" void evma_initialize_library (EMCallback cb)
 		EventMachine->_UseEpoll();
 	if (bUseKqueue)
 		EventMachine->_UseKqueue();
+	if (bUseEventPorts)
+		EventMachine->_UseEventPorts();
 }
 
 
@@ -717,6 +720,14 @@ extern "C" void evma_set_kqueue (int use)
 	bUseKqueue = !!use;
 }
 
+/***************
+evma_set_event_ports
+***************/
+
+extern "C" void evma_set_event_ports (int use)
+{
+	bUseEventPorts = !!use;
+}
 
 /**********************
 evma_set_rlimit_nofile

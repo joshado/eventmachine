@@ -922,6 +922,43 @@ static VALUE t__kqueue_set (VALUE self, VALUE val)
 }
 
 
+/***********
+t__event_ports_p
+***********/
+
+static VALUE t__event_ports_p (VALUE self)
+{
+  #ifdef HAVE_EVENT_PORTS
+  return Qtrue;
+  #else
+  return Qfalse;
+  #endif
+}
+
+/*********
+t__event_ports
+*********/
+
+static VALUE t__event_ports (VALUE self)
+{
+	evma_set_event_ports (1);
+	return Qtrue;
+}
+
+/*************
+t__event_ports_set
+*************/
+
+static VALUE t__event_ports_set (VALUE self, VALUE val)
+{
+	if (t__event_ports_p(self) == Qfalse)
+		rb_raise (EM_eUnsupported, "Event Ports are not supported on this platform");
+
+	evma_set_event_ports (val == Qtrue ? 1 : 0);
+	return val;
+}
+
+
 /********
 t__ssl_p
 ********/
@@ -1185,6 +1222,10 @@ extern "C" void Init_rubyeventmachine()
 	rb_define_module_function (EmModule, "kqueue", (VALUE(*)(...))t__kqueue, 0);
 	rb_define_module_function (EmModule, "kqueue=", (VALUE(*)(...))t__kqueue_set, 1);
 	rb_define_module_function (EmModule, "kqueue?", (VALUE(*)(...))t__kqueue_p, 0);
+
+	rb_define_module_function (EmModule, "event_ports", (VALUE(*)(...))t__event_ports, 0);
+	rb_define_module_function (EmModule, "event_ports=", (VALUE(*)(...))t__event_ports_set, 1);
+	rb_define_module_function (EmModule, "event_ports?", (VALUE(*)(...))t__event_ports_p, 0);
 
 	rb_define_module_function (EmModule, "ssl?", (VALUE(*)(...))t__ssl_p, 0);
 

@@ -76,6 +76,7 @@ EventMachine_t::EventMachine_t (EMCallback event_callback):
 	bEpoll (false),
 	epfd (-1),
 	bKqueue (false),
+	bEventPorts (true),
 	kqfd (-1),
 	inotify (NULL)
 {
@@ -164,6 +165,22 @@ void EventMachine_t::_UseKqueue()
 	bKqueue = true;
 	#endif
 }
+
+/**************************
+EventMachine_t::_UseEventPorts
+**************************/
+
+void EventMachine_t::_UseEventPorts()
+{
+	/* Temporary.
+	 * See comments under _UseEpoll.
+	 */
+
+	#ifdef HAVE_EVENT_PORTS
+	bEventPorts = true;
+	#endif
+}
+
 
 
 /****************************
@@ -457,6 +474,13 @@ void EventMachine_t::Run()
 		LoopbreakDescriptor *ld = new LoopbreakDescriptor (LoopBreakerReader, this);
 		assert (ld);
 		Add (ld);
+	}
+	#endif
+
+	#ifdef HAVE_EVENT_PORTS
+	if (bEventPorts) {
+		printf("Using event ports\n");
+
 	}
 	#endif
 
@@ -1853,7 +1877,7 @@ const unsigned long EventMachine_t::_OpenFileForWriting (const char *filename)
 		return 0;
 
   int fd = open (filename, O_CREAT|O_TRUNC|O_WRONLY|O_NONBLOCK, 0644);
-  
+
 	FileStreamDescriptor *fsd = new FileStreamDescriptor (fd, this);
   if (!fsd)
   	throw std::runtime_error ("no file-stream allocated");
