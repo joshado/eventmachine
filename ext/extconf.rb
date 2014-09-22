@@ -35,6 +35,9 @@ else
   add_define "HAVE_KQUEUE" if have_header("sys/event.h") and have_header("sys/queue.h")
 end
 
+# Add in detector for Solaris Event Ports
+add_define "HAVE_EVENT_PORTS" if have_header('port.h') and have_func('port_create', 'port.h')
+
 # Main platform invariances:
 
 case RUBY_PLATFORM
