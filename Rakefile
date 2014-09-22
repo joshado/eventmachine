@@ -33,7 +33,10 @@ require 'rake'      unless defined?(Rake)
 Package = false # Build zips and tarballs?
 Dir.glob('tasks/*.rake').each { |r| Rake.application.add_import r }
 
-MAKE = ENV['MAKE'] || if RUBY_PLATFORM =~ /mswin/ # mingw uses make.
+MAKE = ENV['MAKE'] || case RUBY_PLATFORM
+when /solaris/ # lets use gnu make on solaris
+  'gmake'
+when /mswin/ # mingw uses make.
   'nmake'
 else
   'make'
@@ -195,7 +198,7 @@ namespace :ext do
   file ext_libname => ext_sources + ['ext/Makefile'] do
     chdir('ext') { sh MAKE }
   end
-  
+
   file ffr_libname => ffr_sources + ['ext/fastfilereader/Makefile'] do
     chdir('ext/fastfilereader') { sh MAKE }
   end
@@ -317,7 +320,7 @@ task :docs => :rdoc do
   case RUBY_PLATFORM
   when /darwin/       ; sh 'open rdoc/index.html'
   when /mswin|mingw/  ; sh 'start rdoc\index.html'
-  else 
+  else
     sh 'firefox rdoc/index.html'
   end
 end
@@ -351,7 +354,7 @@ Rake::Task[:clean].enhance [:clobber_package]
 
 namespace :gem do
   desc 'Install gem (and sudo if required)'
-  task :install => :package do 
+  task :install => :package do
     gem_cmd(:install, "pkg/#{Spec.name}-#{Spec.version}.gem")
   end
 
@@ -359,7 +362,7 @@ namespace :gem do
   task :uninstall do
     gem_cmd(:uninstall, "#{Spec.name}", "-v=#{Spec.version}")
   end
-  
+
   desc "Generate new gemspec"
   task :spec => :clobber do
     open("eventmachine.gemspec", 'w') { |f| f.write Spec.to_ruby }
