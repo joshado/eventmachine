@@ -3,7 +3,7 @@
 # Author:: Francis Cianfrocca (gmail: blackhedd)
 # Homepage::  http://rubyeventmachine.com
 # Date:: 8 April 2006
-# 
+#
 # See EventMachine and EventMachine::Connection for documentation and
 # usage examples.
 #
@@ -11,18 +11,18 @@
 #
 # Copyright (C) 2006-07 by Francis Cianfrocca. All Rights Reserved.
 # Gmail: blackhedd
-# 
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of either: 1) the GNU General Public License
 # as published by the Free Software Foundation; either version 2 of the
 # License, or (at your option) any later version; or 2) Ruby's License.
-# 
+#
 # See the file COPYING for complete licensing information.
 #
 #---------------------------------------------------------------------------
 #
 #
-# 
+#
 
 $:.unshift "../lib"
 require 'eventmachine'
@@ -35,12 +35,36 @@ class TestServers < Test::Unit::TestCase
   Port = 9555
 
   module NetstatHelper
-    GlobalUdp4Rexp = /udp.*\s+(?:\*|(?:0\.){3}0)[:.](\d+)\s/i
-    GlobalTcp4Rexp = /tcp.*\s+(?:\*|(?:0\.){3}0)[:.](\d+)\s/i
-    LocalUdpRexp = /udp.*\s+(?:127\.0\.0\.1|::1)[:.](\d+)\s/i
-    LocalTcpRexp = /tcp.*\s+(?:127\.0\.0\.1|::1)[:.](\d+)\s/i
-    def grep_netstat(pattern)
-      `netstat -an`.scan(/^.*$/).grep(pattern)
+
+    if RUBY_PLATFORM =~ /solaris/
+      GlobalUdp4Rexp = /\s*(?:\*|(?:0\.){3}0)[.](\d+)/i
+      GlobalTcp4Rexp = /\s*(?:\*|(?:0\.){3}0)[.](\d+)/i
+      LocalUdpRexp = /\s*(?:127\.0\.0\.1|::1)[.](\d+)/i
+      LocalTcpRexp = /\s*(?:127\.0\.0\.1|::1)[.](\d+)/i
+
+      def grep_netstat(pattern)
+        case pattern.object_id
+        when GlobalUdp4Rexp.object_id
+          `netstat -an -f inet -P udp`.scan(/^.*$/).grep(pattern)
+        when GlobalTcp4Rexp.object_id
+          `netstat -an -f inet -P tcp`.scan(/^.*$/).grep(pattern)
+        when LocalUdpRexp.object_id
+          `netstat -an -f inet -P udp`.scan(/^.*$/).grep(pattern)
+        when LocalTcpRexp.object_id
+          `netstat -an -f inet -P tcp`.scan(/^.*$/).grep(pattern)
+        else
+          puts "What is #{pattern.object_id} #{LocalTcpRexp.object_id}"
+        end
+      end
+    else
+      GlobalUdp4Rexp = /udp.*\s+(?:\*|(?:0\.){3}0)[:.](\d+)\s/i
+      GlobalTcp4Rexp = /tcp.*\s+(?:\*|(?:0\.){3}0)[:.](\d+)\s/i
+      LocalUdpRexp = /udp.*\s+(?:127\.0\.0\.1|::1)[:.](\d+)\s/i
+      LocalTcpRexp = /tcp.*\s+(?:127\.0\.0\.1|::1)[:.](\d+)\s/i
+
+      def grep_netstat(pattern)
+        `netstat -an`.scan(/^.*$/).grep(pattern)
+      end
     end
   end
   include NetstatHelper
